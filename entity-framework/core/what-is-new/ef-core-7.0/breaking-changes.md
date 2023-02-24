@@ -21,6 +21,7 @@ EF Core 7.0 targets .NET 6. This means that existing applications that target .N
 | [`Encrypt` defaults to `true` for SQL Server connections](#encrypt-true)                                                                 | High       |
 | [Some warnings will again throw exceptions by default](#warnings-as-errors)                                                              | High       |
 | [SQL Server tables with triggers or certain computed columns now require special EF Core configuration](#sqlserver-tables-with-triggers) | High       |
+| [SQLite tables with AFTER triggers and virtual tables now require special EF Core configuration](#sqlite-tables-and-returning-clause)    | High       |
 | [Orphaned dependents of optional relationships are not automatically deleted](#optional-deletes)                                         | Medium     |
 | [Cascade delete is configured between tables when using TPT mapping with SQL Server](#tpt-cascade-delete)                                | Medium     |
 | [Key properties may need to be configured with a provider value comparer](#provider-value-comparer)                                      | Low        |
@@ -62,7 +63,7 @@ This change was made to ensure that, by default, either the connection is secure
 
 There are three ways to proceed:
 
-1. [Install a valid certificate on the server](/sql/database-engine/configure-windows/enable-encrypted-connections-to-the-database-engine). Note that this is an involved process and requires a obtaining a certificate and ensuring it is signed by an authority trusted by the client.
+1. [Install a valid certificate on the server](/sql/database-engine/configure-windows/enable-encrypted-connections-to-the-database-engine). Note that this is an involved process and requires obtaining a certificate and ensuring it is signed by an authority trusted by the client.
 2. If the server has a certificate, but it is not trusted by the client, then `TrustServerCertificate=True` to allow bypassing the normal trust mechanims.
 3. Explicitly add `Encrypt=False` to the connection string.
 
@@ -114,7 +115,7 @@ protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 
 #### Old behavior
 
-Previous versions of the SQL Server saved changes via a less efficient technique which always worked.
+Previous versions of the SQL Server provider saved changes via a less efficient technique which always worked.
 
 #### New behavior
 
@@ -141,6 +142,33 @@ Use the convention on your `DbContext` by overriding `ConfigureConventions`:
 [!code-csharp[Main](../../../../samples/core/SqlServer/Misc/TriggersContext.cs?name=ConfigureConventions)]
 
 This effectively calls `HasTrigger` on all your model's tables, instead of you having to do it manually for each and every table.
+
+### SQLite tables with AFTER triggers and virtual tables now require special EF Core configuration
+
+[Tracking Issue #29916](https://github.com/dotnet/efcore/issues/29916)
+
+#### Old behavior
+
+Previous versions of the SQLite provider saved changes via a less efficient technique which always worked.
+
+#### New behavior
+
+By default, EF Core now saves changes via a more efficient technique, using the RETURNING clause. Unfortunately, this technique is not supported on SQLite if target table is has database AFTER triggers, is virtual, or if older versions of SQLite are being used. See the [SQLite documentation](https://www.sqlite.org/lang_returning.html) for more details.
+
+#### Why
+
+The simplifications and performance improvements linked to the new method are significant enough that it's important to bring them to users by default. At the same time, we estimate usage of database triggers and virtual tables in EF Core applications to be low enough that the negative breaking change consequences are outweighed by the performance gain.
+
+#### Mitigations
+
+In EF Core 8.0, a mechanism will be introduced that will allow specifying whether to use the new mechanism on a table-by-table basis. With EF Core 7.0, it's possible to revert to the old mechanism for the entire application by inserting the following code in your context configuration:
+
+```c#
+protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    => optionsBuilder
+        .UseSqlite(...)
+        .ReplaceService<IUpdateSqlGenerator, SqliteLegacyUpdateSqlGenerator>();
+```
 
 ## Medium-impact changes
 
@@ -398,7 +426,7 @@ Query or attach entities before marking entities as `Deleted`, or manually set n
 
 #### Old behavior
 
-In EF Core 6.0, using the Cosmos <xref:Microsoft.EntityFrameworkCore.CosmosQueryableExtensions.FromSqlRaw%2A> extension method when using a relational provider, or the relational <xref:Microsoft.EntityFrameworkCore.RelationalQueryableExtensions.FromSqlRaw%2A> extension method when using the Cosmos provider could silently fail.
+In EF Core 6.0, using the Azure Cosmos DB <xref:Microsoft.EntityFrameworkCore.CosmosQueryableExtensions.FromSqlRaw%2A> extension method when using a relational provider, or the relational <xref:Microsoft.EntityFrameworkCore.RelationalQueryableExtensions.FromSqlRaw%2A> extension method when using the Azure Cosmos DB provider could silently fail.
 
 #### New behavior
 

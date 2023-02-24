@@ -1,8 +1,8 @@
 ---
 title: Azure Cosmos DB Provider - EF Core
-description: Documentation for the database provider that allows Entity Framework Core to be used with the Azure Cosmos DB SQL API
+description: Documentation for the database provider that allows Entity Framework Core to be used with Azure Cosmos DB.
 author: AndriySvyryd
-ms.date: 01/11/2022
+ms.date: 02/12/2023
 uid: core/providers/cosmos/index
 ---
 # EF Core Azure Cosmos DB Provider
@@ -12,7 +12,7 @@ This database provider allows Entity Framework Core to be used with Azure Cosmos
 It is strongly recommended to familiarize yourself with the [Azure Cosmos DB documentation](/azure/cosmos-db/introduction) before reading this section.
 
 > [!NOTE]
-> This provider only works with the SQL API of Azure Cosmos DB.
+> This provider only works with Azure Cosmos DB for NoSQL.
 
 ## Install
 
@@ -42,7 +42,7 @@ As for other providers the first step is to call [UseCosmos](/dotnet/api/Microso
 [!code-csharp[Configuration](../../../../samples/core/Cosmos/ModelBuilding/OrderContext.cs?name=Configuration)]
 
 > [!WARNING]
-> The endpoint and key are hardcoded here for simplicity, but in a production app these should be [stored securely](/aspnet/core/security/app-secrets#secret-manager).
+> The endpoint and key are hardcoded here for simplicity, but in a production app these should be [stored securely](/aspnet/core/security/app-secrets#secret-manager). See [Connecting and authenticating](xref:core/providers/cosmos/index#connecting-and-authenticating) for different ways to connect to Azure Cosmos DB.
 
 In this example `Order` is a simple entity with a reference to the [owned type](xref:core/modeling/owned-entities) `StreetAddress`.
 
@@ -57,14 +57,88 @@ Saving and querying data follows the normal EF pattern:
 > [!IMPORTANT]
 > Calling [EnsureCreatedAsync](/dotnet/api/Microsoft.EntityFrameworkCore.Storage.IDatabaseCreator.EnsureCreatedAsync) is necessary to create the required containers and insert the [seed data](xref:core/modeling/data-seeding) if present in the model. However `EnsureCreatedAsync` should only be called during deployment, not normal operation, as it may cause performance issues.
 
-## Cosmos options
+## Connecting and authenticating
 
-It is also possible to configure the Cosmos DB provider with a single connection string and to specify other options to customize the connection:
+The Azure Cosmos DB provider for EF Core has multiple overloads of the [UseCosmos](/dotnet/api/Microsoft.EntityFrameworkCore.CosmosDbContextOptionsExtensions.UseCosmos) method. These overloads support the different ways that a connection can be made to the database, and the different ways of ensuring that the connection is secure.
+
+> [!IMPORTANT]
+> Make sure to understand [_Secure access to data in Azure Cosmos DB_](/azure/cosmos-db/secure-access-to-data) to understand the security implications and best practices for using each overload of the `UseCosmos` method.
+
+| Connection Mechanism       | UseCosmos Overload                                                     | More information                                                                          |
+|----------------------------|------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
+| Account endpoint and key   | `UseCosmos<DbContext>(accountEndpoint, accountKey, databaseName)`      | [Primary/secondary keys](/azure/cosmos-db/secure-access-to-data#primary-keys)             |
+| Account endpoint and token | `UseCosmos<DbContext>(accountEndpoint, tokenCredential, databaseName)` | [Resource tokens](/azure/cosmos-db/secure-access-to-data#primary-keys)                    |
+| Connection string          | `UseCosmos<DbContext>(connectionString, databaseName)`                 | [Work with account keys and connection strings](/azure/cosmos-db/scripts/cli/common/keys) |
+
+## Queries
+
+### LINQ queries
+
+[EF Core LINQ queries](xref:core/querying/index) can be executed against Azure Cosmos DB in the same way as for other database providers. For example:
+
+<!--
+        var stringResults = await context.Triangles.Where(
+                e => e.Name.Length > 4
+                     && e.Name.Trim().ToLower() != "obtuse"
+                     && e.Name.TrimStart().Substring(2, 2).Equals("uT", StringComparison.OrdinalIgnoreCase))
+            .ToListAsync();
+-->
+[!code-csharp[StringTranslations](../../../../samples/core/Miscellaneous/NewInEFCore6.Cosmos/CosmosQueriesSample.cs?name=StringTranslations)]
+
+> [!NOTE]
+> The Azure Cosmos DB provider does not translate the same set of LINQ queries as other providers. See [_Limitations_](xref:core/providers/cosmos/limitations) for more information.
+
+### SQL queries
+
+Queries can also be written [directly in SQL](xref:core/querying/sql-queries). For example:
+
+<!--
+            var maxAngle = 60;
+            var results = await context.Triangles.FromSqlRaw(
+                    @"SELECT * FROM root c WHERE c[""Angle1""] <= {0} OR c[""Angle2""] <= {0}", maxAngle)
+                .ToListAsync();
+-->
+[!code-csharp[FromSql](../../../../samples/core/Miscellaneous/NewInEFCore6.Cosmos/CosmosQueriesSample.cs?name=FromSql)]
+
+This query results in the following query execution:
+
+```sql
+SELECT c
+FROM (
+    SELECT * FROM root c WHERE c["Angle1"] <= @p0 OR c["Angle2"] <= @p0
+) c
+```
+
+Just like for relational `FromSql` queries, the hand written SQL can be further composed using LINQ operators. For example:
+
+<!--
+            var maxAngle = 60;
+            var results = await context.Triangles.FromSqlRaw(
+                    @"SELECT * FROM root c WHERE c[""Angle1""] <= {0} OR c[""Angle2""] <= {0}", maxAngle)
+                .Where(e => e.InsertedOn <= DateTime.UtcNow)
+                .Select(e => e.Angle1).Distinct()
+                .ToListAsync();
+-->
+[!code-csharp[FromSqlComposed](../../../../samples/core/Miscellaneous/NewInEFCore6.Cosmos/CosmosQueriesSample.cs?name=FromSqlComposed)]
+
+This combination of SQL and LINQ is translated to:
+
+```sql
+SELECT DISTINCT c["Angle1"]
+FROM (
+    SELECT * FROM root c WHERE c["Angle1"] <= @p0 OR c["Angle2"] <= @p0
+) c
+WHERE (c["InsertedOn"] <= GetCurrentDateTime())
+```
+
+## Azure Cosmos DB options
+
+It is also possible to configure the Azure Cosmos DB provider with a single connection string and to specify other options to customize the connection:
 
 [!code-csharp[Configuration](../../../../samples/core/Cosmos/ModelBuilding/OptionsContext.cs?name=Configuration)]
 
 > [!TIP]
-> See the [Azure Cosmos DB Options documentation](/dotnet/api/microsoft.azure.cosmos.cosmosclientoptions) for a detailed description of the effect of each option mentioned above.
+> The code above shows possible options. It is not intended that these will all be used at the same time! See the [Azure Cosmos DB Options documentation](/dotnet/api/microsoft.azure.cosmos.cosmosclientoptions) for a detailed description of the effect of each option mentioned above.
 
 ## Cosmos-specific model customization
 
@@ -84,7 +158,7 @@ If no other entity type will ever be stored in the same container the discrimina
 
 ### Partition keys
 
-By default EF Core will create containers with the partition key set to `"__partitionKey"` without supplying any value for it when inserting items. But to fully leverage the performance capabilities of Azure Cosmos a [carefully selected partition key](/azure/cosmos-db/partition-data) should be used. It can be configured by calling [HasPartitionKey](/dotnet/api/Microsoft.EntityFrameworkCore.CosmosEntityTypeBuilderExtensions.HasPartitionKey):
+By default, EF Core will create containers with the partition key set to `"__partitionKey"` without supplying any value for it when inserting items. But to fully leverage the performance capabilities of Azure Cosmos DB, a [carefully selected partition key](/azure/cosmos-db/partition-data) should be used. It can be configured by calling [HasPartitionKey](/dotnet/api/Microsoft.EntityFrameworkCore.CosmosEntityTypeBuilderExtensions.HasPartitionKey):
 
 [!code-csharp[PartitionKey](../../../../samples/core/Cosmos/ModelBuilding/OrderContext.cs?name=PartitionKey)]
 
@@ -99,7 +173,7 @@ It is generally recommended to add the partition key to the primary key as that 
 
 ### Provisioned throughput
 
-If you use EF Core to create the Azure Cosmos database or containers you can configure [provisioned throughput](/azure/cosmos-db/set-throughput) for the database by calling <xref:Microsoft.EntityFrameworkCore.CosmosModelBuilderExtensions.HasAutoscaleThroughput%2A?displayProperty=nameWithType> or <xref:Microsoft.EntityFrameworkCore.CosmosModelBuilderExtensions.HasManualThroughput%2A?displayProperty=nameWithType>. For example:
+If you use EF Core to create the Azure Cosmos DB database or containers you can configure [provisioned throughput](/azure/cosmos-db/set-throughput) for the database by calling <xref:Microsoft.EntityFrameworkCore.CosmosModelBuilderExtensions.HasAutoscaleThroughput%2A?displayProperty=nameWithType> or <xref:Microsoft.EntityFrameworkCore.CosmosModelBuilderExtensions.HasManualThroughput%2A?displayProperty=nameWithType>. For example:
 
 <!--
 modelBuilder.HasManualThroughput(2000);
@@ -119,12 +193,68 @@ modelBuilder.Entity<Family>(
 -->
 [!code-csharp[EntityTypeThroughput](../../../../samples/core/Miscellaneous/NewInEFCore6.Cosmos/CosmosModelConfigurationSample.cs?name=EntityTypeThroughput)]
 
+### Time-to-live
+
+Entity types in the Azure Cosmos DB model can now be configured with a default time-to-live. For example:
+
+```csharp
+modelBuilder.Entity<Hamlet>().HasDefaultTimeToLive(3600);
+```
+
+Or, for the analytical store:
+
+```csharp
+modelBuilder.Entity<Hamlet>().HasAnalyticalStoreTimeToLive(3600);
+```
+
+Time-to-live for individual entities can be set using a property mapped to "ttl" in the JSON document. For example:
+
+<!--
+            modelBuilder.Entity<Village>()
+                .HasDefaultTimeToLive(3600)
+                .Property(e => e.TimeToLive)
+                .ToJsonProperty("ttl");
+-->
+[!code-csharp[TimeToLiveProperty](../../../../samples/core/Miscellaneous/NewInEFCore6.Cosmos/CosmosModelConfigurationSample.cs?name=TimeToLiveProperty)]
+
+> [!NOTE]
+> A default time-to-live must configured on the entity type for the "ttl" to have any effect. See [_Time to Live (TTL) in Azure Cosmos DB_](/azure/cosmos-db/nosql/time-to-live) for more information.
+
+The time-to-live property is then set before the entity is saved. For example:
+
+<!--
+        var village = new Village { Id = "DN41", Name = "Healing", TimeToLive = 60 };
+        context.Add(village);
+        await context.SaveChangesAsync();
+-->
+[!code-csharp[SetTtl](../../../../samples/core/Miscellaneous/NewInEFCore6.Cosmos/CosmosModelConfigurationSample.cs?name=SetTtl)]
+
+The time-to-live property can be a [shadow property](xref:core/modeling/shadow-properties) to avoid polluting the domain entity with database concerns. For example:
+
+<!--
+            modelBuilder.Entity<Hamlet>()
+                .HasDefaultTimeToLive(3600)
+                .Property<int>("TimeToLive")
+                .ToJsonProperty("ttl");
+-->
+[!code-csharp[TimeToLiveShadowProperty](../../../../samples/core/Miscellaneous/NewInEFCore6.Cosmos/CosmosModelConfigurationSample.cs?name=TimeToLiveShadowProperty)]
+
+The shadow time-to-live property is then set by [accessing the tracked entity](xref:core/change-tracking/entity-entries). For example:
+
+<!--
+        var hamlet = new Hamlet { Id = "DN37", Name = "Irby" };
+        context.Add(hamlet);
+        context.Entry(hamlet).Property("TimeToLive").CurrentValue = 60;
+        await context.SaveChangesAsync();
+-->
+[!code-csharp[SetTtlShadow](../../../../samples/core/Miscellaneous/NewInEFCore6.Cosmos/CosmosModelConfigurationSample.cs?name=SetTtlShadow)]
+
 ## Embedded entities
 
 > [!NOTE]
 > Related entity types are configured as owned by default. To prevent this for a specific entity type call <xref:Microsoft.EntityFrameworkCore.ModelBuilder.Entity%2A?displayProperty=nameWithType>.
 
-For Cosmos, owned entities are embedded in the same item as the owner. To change a property name use [ToJsonProperty](/dotnet/api/Microsoft.EntityFrameworkCore.CosmosEntityTypeBuilderExtensions.ToJsonProperty):
+For Azure Cosmos DB, owned entities are embedded in the same item as the owner. To change a property name use [ToJsonProperty](/dotnet/api/Microsoft.EntityFrameworkCore.CosmosEntityTypeBuilderExtensions.ToJsonProperty):
 
 [!code-csharp[PropertyNames](../../../../samples/core/Cosmos/ModelBuilding/OrderContext.cs?name=PropertyNames)]
 

@@ -363,13 +363,13 @@ For further information, [see the full documentation on event counters](xref:cor
 * Scaffolding existing databases now singularizes table names, so tables named `People` and `Addresses` will be scaffolded to entity types called `Person` and `Address`. [Original database names can still be preserved](xref:core/managing-schemas/scaffolding#preserving-names).
 * The new [`--no-onconfiguring`](xref:core/cli/dotnet#dotnet-ef-dbcontext-scaffold) option can instruct EF Core to exclude `OnModelConfiguring` when scaffolding a model.
 
-### Cosmos
+### Azure Cosmos DB
 
-* [Cosmos connection settings](xref:core/providers/cosmos/index#cosmos-options) have been expanded.
-* Optimistic concurrency is now [supported on Cosmos via the use of ETags](xref:core/providers/cosmos/index#optimistic-concurrency-with-etags).
-* The new `WithPartitionKey` method allows the Cosmos [partition key](xref:core/providers/cosmos/index#partition-keys) to be included both in the model and in queries.
-* The string methods [`Contains`](/dotnet/api/system.string.contains), [`StartsWith`](/dotnet/api/system.string.startswith) and [`EndsWith`](/dotnet/api/system.string.endswith) are now translated for Cosmos.
-* The C# `is` operator is now translated on Cosmos.
+* [Azure Cosmos DB connection settings](xref:core/providers/cosmos/index#cosmos-options) have been expanded.
+* Optimistic concurrency is now [supported on Azure Cosmos DB via the use of ETags](xref:core/providers/cosmos/index#optimistic-concurrency-with-etags).
+* The new `WithPartitionKey` method allows the Azure Cosmos DB [partition key](xref:core/providers/cosmos/index#partition-keys) to be included both in the model and in queries.
+* The string methods [`Contains`](/dotnet/api/system.string.contains), [`StartsWith`](/dotnet/api/system.string.startswith) and [`EndsWith`](/dotnet/api/system.string.endswith) are now translated for Azure Cosmos DB.
+* The C# `is` operator is now translated on Azure Cosmos DB.
 
 ### Sqlite
 
@@ -385,4 +385,4 @@ For further information, [see the full documentation on event counters](xref:cor
 * The EF Core command line tools now automatically configure the `ASPNETCORE_ENVIRONMENT` *and* `DOTNET_ENVIRONMENT` environment variables to "Development". This brings the experience when using the generic host in line with the experience for ASP.NET Core during development.
 * Custom command-line arguments can be flowed into <xref:Microsoft.EntityFrameworkCore.Design.IDesignTimeDbContextFactory%601>, allowing applications to control how the context is created and initialized.
 * The index fill factor can now be [configured on SQL Server](xref:core/providers/sql-server/indexes#fill-factor).
-* The new <xref:Microsoft.EntityFrameworkCore.RelationalDatabaseFacadeExtensions.IsRelational%2A> property can be used to distinguish when using a relational provider and a non-relation provider (such as InMemory).
+* The new <xref:Microsoft.EntityFrameworkCore.RelationalDatabaseFacadeExtensions.IsRelational%2A> property can be used to distinguish when using a relational provider and a non-relation provider (such as in-memory).
